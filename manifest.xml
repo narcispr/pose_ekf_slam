@@ -1,0 +1,17 @@
+<package>
+  <description brief="pose_ekf_slam">
+     pose_ekf_slam
+  </description>
+  <author>Narcis palomeras</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <depend package="nav_msgs"/>
+  <depend package="geometry_msgs"/>
+  <depend package="sensor_msgs"/>
+  <depend package="visualization_msgs" />
+  <depend package="rospy"/>
+  <depend package="tf"/>
+  <depend package="tf_conversions"/>
+  <depend package="kdl"/>
+</package>
+
