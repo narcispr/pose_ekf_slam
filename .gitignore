@@ -2,3 +2,6 @@ src/pose_ekf_slam/
 *~
 /bin
 /build
+*.pyc
+/msg_gen
+/srv_gen

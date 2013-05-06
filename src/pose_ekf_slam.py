@@ -132,7 +132,7 @@ class PoseEkfSlam :
         return SetLandmarkResponse()
         
         
-    def imuInput(self, data):
+    def imuInput(self, data):        
         self.imu = data
         tf_done = True
         
@@ -176,10 +176,15 @@ class PoseEkfSlam :
                 
             else:
                 try:
+                    self.listener.waitForTransform(self.robot_frame_name, 
+                                                   data.header.frame_id, 
+                                                   data.header.stamp, 
+                                                   rospy.Duration(2.0))
+                                                       
                     (trans, rot) = self.listener.lookupTransform(
                                         self.robot_frame_name, 
                                         data.header.frame_id, 
-                                        rospy.Time(0))
+                                        data.header.stamp)
                                         
                     self.tf_cache[data.header.frame_id] = [trans, rot]
                     
@@ -216,7 +221,8 @@ class PoseEkfSlam :
 
     def poseUpdate(self, pose_msg):
         """ pose_msg is a geometry_msgs/PoseWithCovarianceStamped msg """
-        tf_done = True
+        tf_done = True        
+        print 'pose update:\n', pose_msg
         self.lock.acquire()
                 
         # Try to make a prediction if 'u' is present and the filter is init
@@ -244,16 +250,18 @@ class PoseEkfSlam :
                     tf_done = False
                     # Wait for the tf between the pose sensor and the robot
                     try:
-                        self.listener.waitForTransform(self.world_frame_name, 
+                        self.listener.waitForTransform(self.robot_frame_name, 
                                                        pose_msg.header.frame_id, 
-                                                       pose_msg.header.stamp, #rospy.Time(),
+                                                       pose_msg.header.stamp,
                                                        rospy.Duration(2.0))
+                                                       
                         (trans, rot) = self.listener.lookupTransform(
                                            self.robot_frame_name, 
                                            pose_msg.header.frame_id, 
                                            pose_msg.header.stamp)
                                            
                         # Pre cache TF
+                        print 'get pose TF cached!'
                         self.tf_cache[pose_msg.header.frame_id] = [trans, rot]
                         
                     except (tf.LookupException, 
@@ -312,9 +320,9 @@ class PoseEkfSlam :
                     print 'waiting for ', twist_msg.header.frame_id, ' message'
                     # Wait for the tf between the velocity sensor and the robot
                     try:
-                        self.listener.waitForTransform(self.world_frame_name, 
+                        self.listener.waitForTransform(self.robot_frame_name, 
                                                        twist_msg.header.frame_id, 
-                                                       twist_msg.header.stamp, #rospy.Time(), 
+                                                       twist_msg.header.stamp,  
                                                        rospy.Duration(2.0))
                                                        
                         (trans, rot) = self.listener.lookupTransform(
@@ -999,11 +1007,11 @@ if __name__ == '__main__':
                                   [0.05, 0.05, 0.05])
                                   
         # Initialize vehicle pose (should be done by the "navigator" node) 
-        # position = Point()
-        # position.x = 0.
-        # position.y = 0.
-        # position.z = 0.
-        # pose_3d_ekf.initEkf(position)
+#        position = Point()
+#        position.x = 0.
+#        position.y = 0.
+#        position.z = 0.
+#        pose_3d_ekf.initEkf(position)
         
         rospy.spin()
     except rospy.ROSInterruptException: 

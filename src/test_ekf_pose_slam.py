@@ -2,15 +2,16 @@
 
 # ROS imports
 import roslib 
-roslib.load_manifest('pose_ekf_slam-ros-pkg')
+roslib.load_manifest('pose_ekf_slam')
 import rospy
 import tf
-from tf.transformations import euler_from_quaternion
 from sensor_msgs.msg import Imu
-from geometry_msgs.msg import PoseWithCovarianceStamped, TwistWithCovarianceStamped
+from geometry_msgs.msg import PoseWithCovarianceStamped
+from geometry_msgs.msg import TwistWithCovarianceStamped
 from nav_msgs.msg import Odometry
+from pose_ekf_slam.srv import SetPositionRequest, SetPosition
 import PyKDL
-from numpy import *
+import numpy as np
 
 class Navigator :
     
@@ -19,25 +20,26 @@ class Navigator :
         self.name = name
         
         # Create publisher
-        self.pub_imu = rospy.Publisher("/pose_3d_ekf/imu_input", Imu)
-        self.pub_vel = rospy.Publisher("/pose_3d_ekf/velocity_update", TwistWithCovarianceStamped)
-        self.pub_pose = rospy.Publisher("/pose_3d_ekf/pose_update", PoseWithCovarianceStamped)
-        self.pub_landmark = rospy.Publisher("/pose_ekf_slam/landmark_update", PoseWithCovarianceStamped)
+        self.pub_imu = rospy.Publisher("/pose_ekf_slam/imu_input", 
+                                       Imu)
+        self.pub_vel = rospy.Publisher("/pose_ekf_slam/velocity_update", 
+                                       TwistWithCovarianceStamped)
+        self.pub_pose = rospy.Publisher("/pose_ekf_slam/pose_update", 
+                                        PoseWithCovarianceStamped)
+        self.pub_landmark = rospy.Publisher("/pose_ekf_slam/landmark_update/landmark_0", 
+                                            PoseWithCovarianceStamped)
         
         # Create Subscriber Inputs (u)
         rospy.Subscriber("/dataNavigator", Odometry, self.odomInput)
  
-        self.landmark_id = ['l0', 'l1', 'l2', 'l3', 'l4', 'l5', 'l6', 'l7', 'l8', 'l9']
-        self.landmark_pose = [0., 1., 2., 3., 4., 5., 6., 7., 8., 9.]
-        self.landmark_current = 0
         
-        o = tf.transformations.quaternion_from_euler(0.0, 0.0, 0.0, 'sxyz')
+        # o = tf.transformations.quaternion_from_euler(0.0, 0.0, 0.0, 'sxyz')
 
         # Create timers
-        # rospy.Timer(rospy.Duration(0.1), self.pubImu)
-        # rospy.Timer(rospy.Duration(1.0), self.pubVel)
-        # rospy.Timer(rospy.Duration(2.0), self.pubPose)
-        rospy.Timer(rospy.Duration(0.3), self.pubLandmark)
+        rospy.Timer(rospy.Duration(0.5), self.pubImu)
+        # rospy.Timer(rospy.Duration(0.5), self.pubVel)
+        rospy.Timer(rospy.Duration(2.0), self.pubPose)
+        # rospy.Timer(rospy.Duration(2.0), self.pubLandmark)
         
         # Init pose
         self.position = 0
@@ -58,7 +60,8 @@ class Navigator :
         # Publish TF
         imu_tf = tf.TransformBroadcaster()
         o = tf.transformations.quaternion_from_euler(0.0, 0.0, 0.0, 'sxyz')
-        imu_tf.sendTransform((0.0, 0.0, 0.0), o, imu.header.stamp, imu.header.frame_id, 'girona500')
+        imu_tf.sendTransform((0.0, 0.0, 0.0), o, imu.header.stamp, 
+                             imu.header.frame_id, 'robot')
 
 
     def pubVel(self, event):
@@ -69,9 +72,10 @@ class Navigator :
         # create a new velocity
         v.twist.twist.linear.x = 0.9
         v.twist.twist.linear.y = 0.0
-        v.twist.twist.linear.z = 0.2
+        v.twist.twist.linear.z = 0.0
         
-        # Only the number in the covariance matrix diagonal are used for the updates!
+        # Only the number in the covariance matrix diagonal 
+        # are used for the updates!
         v.twist.covariance[0] = 0.01
         v.twist.covariance[7] = 0.01
         v.twist.covariance[14] = 0.01
@@ -82,7 +86,8 @@ class Navigator :
         # Publish TF
         vel_tf = tf.TransformBroadcaster()
         o = tf.transformations.quaternion_from_euler(0.0, 0.0, 0.0, 'sxyz')
-        vel_tf.sendTransform((0.0, 0.0, 0.0), o, v.header.stamp, v.header.frame_id, 'girona500')      
+        vel_tf.sendTransform((0.0, 0.0, 0.0), o, v.header.stamp, 
+                             v.header.frame_id, 'robot')      
         
         
     def pubPose(self, event):
@@ -96,7 +101,8 @@ class Navigator :
         p.pose.pose.position.z = 0.0
         self.position = self.position + 2
        
-        # Only the number in the covariance matrix diagonal are used for the updates!
+        # Only the number in the covariance matrix diagonal
+        # are used for the updates!
         # Example of X, Y update without modifying the Z
         p.pose.covariance[0] = 1.0
         p.pose.covariance[7] = 1.0
@@ -108,7 +114,8 @@ class Navigator :
         # Publish TF
         pose_tf = tf.TransformBroadcaster()
         o = tf.transformations.quaternion_from_euler(0.0, 0.0, 0.0, 'sxyz')
-        pose_tf.sendTransform((0.0, 0.0, 0.0), o, p.header.stamp, p.header.frame_id, 'girona500')      
+        pose_tf.sendTransform((0.0, 0.0, 0.0), o, p.header.stamp, 
+                              p.header.frame_id, 'robot')      
         
         
     def odomInput(self, odom):
@@ -118,10 +125,11 @@ class Navigator :
     def pubLandmark(self, event):
             
         # Create transformation
-        angle = tf.transformations.euler_from_quaternion([self.odom.pose.pose.orientation.x,
-                                                          self.odom.pose.pose.orientation.y,
-                                                          self.odom.pose.pose.orientation.z,
-                                                          self.odom.pose.pose.orientation.w])
+        angle = tf.transformations.euler_from_quaternion(
+            [self.odom.pose.pose.orientation.x,
+             self.odom.pose.pose.orientation.y,
+             self.odom.pose.pose.orientation.z,
+             self.odom.pose.pose.orientation.w])
 
         r = PyKDL.Rotation.RPY(angle[0], angle[1], angle[2])
         t = PyKDL.Vector(self.odom.pose.pose.position.x, 
@@ -129,20 +137,15 @@ class Navigator :
                          self.odom.pose.pose.position.z)
         
         
-        p_t = PyKDL.Vector(self.landmark_pose[self.landmark_current], 
-                           self.landmark_pose[self.landmark_current],
-                           self.landmark_pose[self.landmark_current],)
+        p_t = PyKDL.Vector(10.0, 5.0, 3.0)
         
         rel_pose = r * (p_t - t)
-        # [r, p, y] = rel_pose.M.GetRPY()
         
-        print self.landmark_id[self.landmark_current], ' pose wrt girona500: ', rel_pose
-        # print 'Landmark orientation wrt girona500: ', y
-        
+        print 'landmark_0 pose wrt robot: ', rel_pose
             
         p = PoseWithCovarianceStamped()
         p.header.stamp = rospy.Time.now()
-        p.header.frame_id = self.landmark_id[self.landmark_current]
+        p.header.frame_id = 'landmark_0'
         p.pose.covariance[0] = 0.05
         p.pose.covariance[7] = 0.05
         p.pose.covariance[14] = 0.05
@@ -150,15 +153,14 @@ class Navigator :
         # Publish TF
         pose_tf = tf.TransformBroadcaster()
         o = tf.transformations.quaternion_from_euler(0., 0., 0., 'sxyz')
-        pose_tf.sendTransform((rel_pose.x() + random.normal(0.0, 0.1), 
-                               rel_pose.y() + random.normal(0.0, 0.1), 
-                               rel_pose.z() + random.normal(0.0, 0.1)), 
+        pose_tf.sendTransform((rel_pose.x() + np.random.normal(0.0, 0.05), 
+                               rel_pose.y() + np.random.normal(0.0, 0.05), 
+                               rel_pose.z() + np.random.normal(0.0, 0.05)), 
                               o, 
                               p.header.stamp, 
                               p.header.frame_id, 
-                              'girona500')
+                              'robot')
         self.pub_landmark.publish(p)
-        self.landmark_current = (self.landmark_current + 1) % 10
         
               
 if __name__ == '__main__':
@@ -166,6 +168,20 @@ if __name__ == '__main__':
         #   Init node
         rospy.init_node('test_ekf_slam')
         navigator = Navigator(rospy.get_name())
+        
+        # Init pose_ekf_slam server
+        try:
+            rospy.wait_for_service('/pose_ekf_slam/set_position', 5)
+            set_pose = rospy.ServiceProxy('pose_ekf_slam/set_position', 
+                                          SetPosition)
+            sp = SetPositionRequest()
+            sp.position.x = 0.0
+            sp.position.y = 0.0
+            sp.position.z = 0.0
+            set_pose(sp)
+        except rospy.exceptions.ROSException:
+            rospy.logerr('Error initializing Pose-EKF-SLAM.')
+            
         rospy.spin()
     except rospy.ROSInterruptException: 
         pass
